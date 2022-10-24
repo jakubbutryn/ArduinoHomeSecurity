@@ -5,27 +5,32 @@
 #include <Servo.h>
 #include <SPI.h>
 #include <MFRC522.h>
+#include "DHT.h"
 #define XPIN A0
 #define YPIN A1
 #define SWPIN 30
 #define buzzer 31
-#define Menu1Screen 0
-#define Menu2Screen 1
+#define Menu1Screen 20
+#define Menu2Screen 21
+#define Menu3Screen 22
 #define ActivatingAlarmScreen 2
 #define ActivatedAlarmScreen 3
 #define ChangePasswordScreen 4
 #define PasswordChangedScreen 5
 #define AlarmOnScreen 6
+#define MappingScreen 7
+#define HomeDataScreen 8
 #define TrigPin 32
 #define EchoPin 33
 #define ServoPin 2
 #define RST_PIN         5          
 #define SS_PIN          53  
 #define IRQ_PIN         19   
+#define sensePin 34
+#define Type DHT11
 
 
-
-
+DHT HT(sensePin,Type);
 MFRC522 mfrc522(SS_PIN, RST_PIN);
 Servo myservo;
 boolean ActiveAlarm = false;
@@ -38,13 +43,20 @@ boolean AlarmActivated = false;
 const byte ROWS = 4; 
 const byte COLS = 4; 
 char keypressed;
-int Screen = 0;
+int Screen = 20;
 boolean AuthorizedAccess=false;
 int xJoystickPosition = 0;
 int yJoystickPosition = 0;
 long Duration;
 int Distance;
 int InitDistance;
+float floatHumidity;
+float floatTempC;
+char charHumidity[7];
+char charTempC[7]; 
+char tempChar[40];
+char tempChar1[40];
+
 
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 
@@ -60,9 +72,40 @@ byte colPins[COLS] = {25, 24, 23, 22};
 
 Keypad myKeypad = Keypad( makeKeymap(keyMap), rowPins, colPins, ROWS, COLS);
 
+byte downArrow[] = {
+ B00000,
+	B00000,
+	B00000,
+	B00000,
+	B00000,
+	B11111,
+	B01110,
+	B00100
+};
+byte upArrow[]={
+  B00100,
+	B01110,
+	B11111,
+	B00000,
+	B00000,
+	B00000,
+	B00000,
+	B00000
+};
+byte degree[]={
+  B00010,
+  B00101,
+  B00010,
+  B00000,
+  B00000,
+  B00000,
+  B00000,
+  B00000
+};
+
 
 void setup() {
-  myservo.write(180);
+  myservo.write(90);
   lcd.init();
   lcd.backlight();
   pinMode(XPIN, INPUT_PULLUP);
@@ -75,6 +118,10 @@ void setup() {
   SPI.begin();      
   mfrc522.PCD_Init();   
   Serial.begin(9600);
+  lcd.createChar(0, upArrow);
+  lcd.createChar(1, downArrow);
+  lcd.createChar(2, degree);
+  HT.begin();
   
 
 }
@@ -84,9 +131,8 @@ void loop() {
 
   if ( Screen == Menu1Screen) {
     AuthorizedAccess=false;
-    lcd.clear();
-    lcd.setCursor(0, 0);
-    lcd.print("Activate Alarm");
+   ScreenTitleChange("Activate Alarm",0,0);
+   Arrow('Down');
     delay(500);
     lcd.clear();
 
@@ -101,23 +147,52 @@ void loop() {
 
   else if (Screen == Menu2Screen) {
 
-    lcd.clear();
-    lcd.setCursor(0, 0);
-    lcd.print("Change Password ");
+    ScreenTitleChange("Change Password",0,0);
+    Arrow('Both');
     delay(500);
     lcd.clear();
     delay(500);
     digitalRead(SWPIN) == LOW ? Screen = ChangePasswordScreen : Screen = Menu2Screen;
     ScroolUpDown();
   }
+  else if (Screen ==Menu3Screen){
+    ScreenTitleChange("Home Data",0,0);
+    Arrow('Up');
+    delay(500);
+    lcd.clear();
+    delay(500);
+    digitalRead(SWPIN) == LOW ? Screen = HomeDataScreen : Screen = Menu3Screen;
+    ScroolUpDown();
+  }
+else if(Screen==HomeDataScreen){
+
+floatHumidity=HT.readHumidity();
+floatTempC=HT.readTemperature();
+
+dtostrf(floatHumidity,4,1,charHumidity);
+dtostrf(floatTempC,4,1,charTempC);
+sprintf(tempChar,"Temp: %s C",charTempC);
+sprintf(tempChar1,"Humidity: %s%%",charHumidity);
+lcd.setCursor(0, 0);
+lcd.print(tempChar);
+lcd.setCursor(0, 1);
+lcd.print(tempChar1);
+Serial.print(tempChar1);
+delay(800);
+lcd.clear();
+
+/*
+lcd.print("Temperature: %c",charTempC);
+*/
+
+  }
   else if (Screen == ActivatingAlarmScreen) {
     //tone(buzzer, 2000, 100);
-    lcd.clear();
-    lcd.setCursor(0, 0);
-    lcd.print("Alarm activated");
+    ScreenTitleChange("Alarm Activated",0,0);
     lcd.setCursor(0, 1);
     lcd.print("in:");
     int countdown = 5; 
+    myservo.write(180);
     while (countdown != 0) {
       lcd.setCursor(13, 1);
       lcd.print(countdown);
@@ -126,25 +201,29 @@ void loop() {
       delay(1000);
       if(countdown==0){
          InitDistance = calculateDistance();
-         ScreenTitleChange("***ARMED***",2,0);
-         Screen = ActivatedAlarmScreen;
+         ScreenTitleChange("**MAPPING**",2,0);
+         Screen = MappingScreen;
       }
      
     
   }
   }
+  else if (Screen == MappingScreen){
+    
+ RotateServo();
+ ScreenTitleChange("***ARMED***",2,0);
+ Screen=ActivatedAlarmScreen;
+  }
   else if (Screen == ActivatedAlarmScreen)
   {
 
     
-    Distance=calculateDistance()<InitDistance-10 ? Screen=AlarmOnScreen:Screen=ActivatedAlarmScreen;
+    //Distance=calculateDistance()<InitDistance-10 ? Screen=AlarmOnScreen:Screen=ActivatedAlarmScreen;
     RotateServo();
     
   }
-  else if (Screen=AlarmOnScreen){
-  lcd.clear();
-  lcd.setCursor(0, 0);
-  lcd.print("ALARM TRIGGERED");
+  else if (Screen==AlarmOnScreen){
+  ScreenTitleChange("ALARM TRIGGERED",0,0);
   tone(buzzer, 700, 50);
   delay(100);
   
@@ -260,10 +339,10 @@ int ScroolUpDown() {
     case 0:
       break;
     case 1:
-      Screen + 1 >= 1 ? Screen = 1 : Screen = Screen + 1;
+      Screen + 1 >= 22 ? Screen = 22 : Screen = Screen + 1;
       break;
     case -1:
-      Screen - 1 <= 0 ? Screen = 0 : Screen = Screen - 1;
+      Screen - 1 <= 20 ? Screen = 20 : Screen = Screen - 1;
       break;
 
 
@@ -271,7 +350,7 @@ int ScroolUpDown() {
 }
 
 void RotateServo(){
- for (int i = 0; i <= 180; i++) { 
+ for (int i = 180; i >=0; i--) { 
     
       
        myservo.write(i);              
@@ -280,12 +359,12 @@ void RotateServo(){
     
   }
   
-  for (int i = 180; i >= 0; i--) { 
+  for (int i = 0; i <=180; i++) { 
     
     
     myservo.write(i);              
                 delay(10); 
-                serial         
+                        
     }
   
 }
@@ -309,6 +388,24 @@ void ScreenTitleChange(char StringToDisplay[],int Column,int Row){
  lcd.setCursor(Column, Row);
  lcd.print(StringToDisplay);
 
+}
+
+void Arrow(char UpDownBoth[]){
+if (UpDownBoth=='Up'){
+  lcd.setCursor(15, 0);
+    lcd.write(byte(0));
+}
+else if(UpDownBoth=='Down'){
+  lcd.setCursor(15, 1);
+    lcd.write(byte(1));
+}
+else if(UpDownBoth=='Both'){
+  lcd.setCursor(15, 0);
+    lcd.write(byte(0));
+    lcd.setCursor(15, 1);
+    lcd.write(byte(1));
+
+}
 }
 
 void LookForCard() 
