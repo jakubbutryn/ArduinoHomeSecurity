@@ -1,5 +1,3 @@
-
-
 #include <ESP8266WiFi.h>
 #include <ESP8266HTTPClient.h>
 #include <WiFiClient.h>
@@ -18,8 +16,8 @@ const char* serverName = "http://mts.wibro.agh.edu.pl/~s403062/projekt_inzyniers
 // Keep this API Key value to be compatible with the PHP code provided in the project page.
 // If you change the apiKeyValue value, the PHP file /esp-post-data.php also needs to have the same key
 String apiKeyValue = "tPmAT5Ab3j7F9";
-String sensorName = "BME280";
-String sensorLocation = "Office";
+String sensorName = "DHT11";
+String sensorLocation = "Home";
 String temp="";
 String hum="";
 /*#include <SPI.h>
@@ -62,10 +60,22 @@ void setup() {
 void loop() {
   //Send an HTTP POST request every 10 minutes
   while (Serial.available()>0){
-          temp=String(Serial.read());
-          Serial.print(temp);
-          hum=String(Serial.read());
-          Serial.print(hum);
+          
+          char s[100]={Serial.read()};
+          char d[]=" ";
+          char *portion1=strtok(s,d);
+          char *portion2=strtok(NULL,d);
+         Serial.print(portion1);
+         
+          //Serial.print(portion2);
+          
+         // Serial.print(temp);
+
+          //temp=String(Serial.parseFloat());
+          //delay(10);
+          
+          //hum=String(Serial.parseFloat());
+          
       }
   if ((millis() - lastTime) > timerDelay) {
     //Check WiFi connection status
@@ -118,3 +128,4 @@ void loop() {
     lastTime = millis();
   }
 }
+
