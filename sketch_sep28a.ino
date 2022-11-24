@@ -41,6 +41,9 @@ Servo myservo;
 boolean ActiveAlarm = false;
 String password = "1111";
 String tempPassword;
+String apiKeyValue = "tPmAT5Ab3j7F9";
+String sensorName = "DHT11";
+String sensorLocation = "Home";
 char *stringWaterLevel;
 boolean passChangeMode = false;
 boolean passChanged = false;
@@ -510,11 +513,7 @@ void fetchHomeData() {
        int waterLevel;
   floatHumidity = HT.readHumidity();
   floatTempC = HT.readTemperature();
-  Serial.print(floatTempC);
-  Serial.print(" ");
-  Serial.print(floatHumidity);
-  Serial.print('\n');
-  
+
 
   waterLevel = analogRead(WaterLevelPin);
   if (waterLevel <= 100) {
@@ -530,10 +529,17 @@ void fetchHomeData() {
     stringWaterLevel = "High";
    
   }
+
+  
   dtostrf(floatHumidity, 4, 1, charHumidity);
   dtostrf(floatTempC, 4, 1, charTempC);
- 
-        
+ //Serial.print(String(stringWaterLevel) + String(floatHumidity) + String(floatTempC));
+ String serialToSend="api_key=" + apiKeyValue + "&sensor=" + sensorName
+                        + "&location=" + sensorLocation + "&value1=" + floatTempC
+                           + "&value2=" + floatHumidity + "&value3=" + stringWaterLevel + "";
+     
+     Serial.print(serialToSend);
+    
         previousTime = currentTime;
       }
   return;
