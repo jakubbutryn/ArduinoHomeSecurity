@@ -7,6 +7,7 @@
 #include <MFRC522.h>
 #include "DHT.h"
 #include <String.h>
+
 #define XPIN A0
 #define YPIN A1
 #define SWPIN 30
@@ -37,44 +38,47 @@
 
 DHT HT(sensePin, Type);
 MFRC522 mfrc522(SS_PIN, RST_PIN);
-Servo myservo;
-boolean ActiveAlarm = false;
+int numOfRFIDsInBase = 4;
+int numOfRFIDs = 1;
+int Screen = 20;
+int screenOffMsg = 0;
+int xJoystickPosition = 0;
+int yJoystickPosition = 0;
+const byte ROWS = 4;
+const byte COLS = 4;
+const unsigned long eventInterval = 100;
+const unsigned long eventInterval2 = 2000;
+unsigned long previousTime = 0;
+long Duration;
+float Distance;
+float InitDistance;
+float floatHumidity;
+float floatTempC;
+
 String password = "1111";
 String tempPassword;
 String apiKeyValue = "tPmAT5Ab3j7F9";
 String sensorName = "DHT11";
 String sensorLocation = "Home";
 char *stringWaterLevel;
+char *stringAlarmStatus="Disarmed"   ;
 boolean passChangeMode = false;
 boolean passChanged = false;
 boolean enterPasswordOnAlarm = false;
-int screenOffMsg = 0;
 boolean AlarmActivated = false;
-const byte ROWS = 4;
-const byte COLS = 4;
-char keypressed;
-int Screen = 20;
+boolean RFIDadded = false;
+boolean ActiveAlarm = false;
 boolean AuthorizedAccess = false;
 boolean DeniedAccess = false;
-int xJoystickPosition = 0;
-int yJoystickPosition = 0;
-long Duration;
-float Distance;
-float InitDistance;
-float floatHumidity;
-float floatTempC;
+char keypressed;
 char charHumidity[7];
 char charTempC[7];
 char tempChar[40];
 char tempChar1[40];
 char tempChar2[40];
-const unsigned long eventInterval = 100;
-const unsigned long eventInterval2 = 2000;
-unsigned long previousTime = 0;
 char arrayOfRFIDs[5][12];
-int numOfRFIDs = 1;
-boolean RFIDadded = false;
-int numOfRFIDsInBase = 4;
+
+
 
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 char keyMap[ROWS][COLS] = {
@@ -108,65 +112,52 @@ byte upArrow[] = {
   B00000,
   B00000
 };
-byte degree[] = {
-  B00010,
-  B00101,
-  B00010,
-  B00000,
-  B00000,
-  B00000,
-  B00000,
-  B00000
-};
+
 
 
 void setup() {
-  strcpy(arrayOfRFIDs[0], "83 61 9A 16");
-  myservo.write(90);
-  lcd.init();
-  lcd.backlight();
   pinMode(XPIN, INPUT_PULLUP);
   pinMode(YPIN, INPUT_PULLUP);
   pinMode(SWPIN, INPUT);
-  digitalWrite(SWPIN, HIGH);
   pinMode(TrigPin, OUTPUT);
   pinMode(EchoPin, INPUT);
-  myservo.attach(2);
+  strcpy(arrayOfRFIDs[0], "83 61 9A 16");
+  digitalWrite(SWPIN, HIGH);
   SPI.begin();
+  HT.begin();
   mfrc522.PCD_Init();
+  lcd.init();
+  lcd.backlight();
   Serial.begin(9600);
   lcd.createChar(0, upArrow);
   lcd.createChar(1, downArrow);
-  lcd.createChar(2, degree);
-  HT.begin();
 }
 
 void loop() {
   if (Screen == Menu1Screen) {
+    stringAlarmStatus="Disarmed";
     AuthorizedAccess = false;
     ScreenTitleChange("Activate Alarm", 0, 0);
     Arrow('Down');
     lcdClear500ms();
     digitalRead(SWPIN) == LOW ? Screen = ActivatingAlarmScreen : Screen = Menu1Screen;
     ScroolUpDown();
+    fetchHomeData();
   } else if (Screen == Menu2Screen) {
     ScreenTitleChange("Change Password", 0, 0);
     Arrow('Both');
     lcdClear500ms();
     digitalRead(SWPIN) == LOW ? Screen = ChangePasswordScreen : Screen = Menu2Screen;
     ScroolUpDown();
+    fetchHomeData();
   } else if (Screen == Menu3Screen) {
     ScreenTitleChange("Home Data", 0, 0);
     Arrow('Both');
     lcdClear500ms();
     digitalRead(SWPIN) == LOW ? Screen = HomeDataScreen : Screen = Menu3Screen;
     ScroolUpDown();
-  } else if (Screen == HomeDataScreen) {
-   
-    
     fetchHomeData();
-    
-   
+  } else if (Screen == HomeDataScreen) {
     sprintf(tempChar, "T:%sC", charTempC);
     sprintf(tempChar1, "Hum:%s%%", charHumidity);
     sprintf(tempChar2, "WL:%s", stringWaterLevel);
@@ -176,28 +167,31 @@ void loop() {
     lcd.print(tempChar2);
     lcd.setCursor(0, 1);
     lcd.print(tempChar1);
-    delay(2000);
+    delay(1000);
     lcd.clear();
     digitalRead(SWPIN) == LOW ? Screen = Menu3Screen : Screen = HomeDataScreen;
+    fetchHomeData();
   } else if (Screen == Menu4Screen) {
     ScreenTitleChange("Add new RFID", 0, 0);
     Arrow('Up');
     lcdClear500ms();
     digitalRead(SWPIN) == LOW ? Screen = AddRFIDScreen : Screen = Menu4Screen;
     ScroolUpDown();
+    fetchHomeData();
   } else if (Screen == ActivatingAlarmScreen) {
-    //tone(buzzer, 2000, 100);
+    stringAlarmStatus="Activating";
     ScreenTitleChange("Alarm Activated", 0, 0);
     lcd.setCursor(0, 1);
     lcd.print("in:");
     int countdown = 5;
-    myservo.write(180);
     while (countdown != 0) {
       lcd.setCursor(13, 1);
       lcd.print(countdown);
       countdown--;
       tone(buzzer, 700, 100);
+    
       delay(1000);
+      fetchHomeData();
       if (countdown == 0) {
         ScreenTitleChange("**MAPPING**", 2, 0);
         Screen = MappingScreen;
@@ -212,57 +206,71 @@ void loop() {
     delay(2000);
     ScreenTitleChange("***ARMED***", 2, 0);
     do {
+      stringAlarmStatus="Armed";
       unsigned long currentTime = millis();
       if (currentTime - previousTime >= eventInterval) {
         Distance = calculateDistance();
         LookForCard(false);
-        
+        fetchHomeData();
         previousTime = currentTime;
       }
     } while (Distance > InitDistance - 10 && AuthorizedAccess == false && DeniedAccess == false);
     if (AuthorizedAccess == true) {
+      
       ScreenTitleChange("ACCES GRANTED", 0, 0);
       for (int i = 0; i < numOfRFIDsInBase; i++) {
         tone(buzzer, 1000, 500);
         delay(700);
         i++;
+        fetchHomeData();
       }
       Screen = Menu1Screen;
     } else if (DeniedAccess == true) {
+      
       ScreenTitleChange("ACCES DENIED", 0, 0);
       tone(buzzer, 100, 1500);
       Screen = ActivatedAlarmScreen;
       DeniedAccess = false;
+      fetchHomeData();
     } else {
       Screen = AlarmOnScreen;
     }
   } else if (Screen == AlarmOnScreen) {
+    stringAlarmStatus="TRIGGERED";
     ScreenTitleChange("ALARM TRIGGERED", 0, 0);
     tone(buzzer, 700, 50);
     LookForCard(false);
+   
     delay(100);
     digitalRead(SWPIN) == LOW ? Screen = DisableAlarmScreen : Screen = AlarmOnScreen;
+    fetchHomeData();
     if (AuthorizedAccess == true) {
+      
       ScreenTitleChange("ACCES GRANTED", 0, 0);
       for (int i = 0; i < numOfRFIDsInBase; i++) {
         tone(buzzer, 1000, 500);
         delay(700);
         i++;
+        fetchHomeData();
       }
       Screen = Menu1Screen;
     } else if (DeniedAccess == true) {
+      
       ScreenTitleChange("ACCES DENIED", 0, 0);
       tone(buzzer, 100, 1500);
       DeniedAccess = false;
       delay(2000);
+      fetchHomeData();
     }
   } else if (Screen == DisableAlarmScreen) {
+    stringAlarmStatus="DISABLING";
     ScreenTitleChange("ENTER PASSWORD", 0, 0);
-    //enterPasswordOnAlarm
+    
     enterPasswordOnAlarm = true;
     int i = 1;
     while (enterPasswordOnAlarm) {
-      tone(buzzer, 2000, 100);  ////
+      
+      fetchHomeData();
       keypressed = myKeypad.getKey();
       if (keypressed != NO_KEY) {
         if (keypressed == '0' || keypressed == '1' || keypressed == '2' || keypressed == '3' || keypressed == '4' || keypressed == '5' || keypressed == '6' || keypressed == '7' || keypressed == '8' || keypressed == '9') {
@@ -316,6 +324,7 @@ void loop() {
     passChangeMode = true;
     passChanged = true;
     while (passChanged) {
+      fetchHomeData();
       keypressed = myKeypad.getKey();
       if (keypressed != NO_KEY) {
         if (keypressed == '0' || keypressed == '1' || keypressed == '2' || keypressed == '3' || keypressed == '4' || keypressed == '5' || keypressed == '6' || keypressed == '7' || keypressed == '8' || keypressed == '9') {
@@ -389,18 +398,17 @@ void loop() {
   } else if (Screen == AddRFIDScreen) {
     ScreenTitleChange("Place RFID Tag", 0, 0);
     LookForCard(true);
+    fetchHomeData();
   }
   if (Screen == PasswordChangedScreen) {
     lcd.clear();
     lcd.setCursor(0, 0);
     lcd.print("Password Changed");
     delay(2000);
+    fetchHomeData();
     Screen = Menu1Screen;
   }
 }
-
-
-
 
 
 int ScroolUpDown() {
@@ -468,7 +476,6 @@ void LookForCard(boolean WantToAddCard) {
   if (WantToAddCard == false) {
     for (int i = 0; i < numOfRFIDsInBase; i++) {
       if (content.substring(1) == arrayOfRFIDs[i]) {
-        
         AuthorizedAccess = true;
         break;
       } else {
@@ -480,6 +487,7 @@ void LookForCard(boolean WantToAddCard) {
       if (content.substring(1) == arrayOfRFIDs[i]) {
         RFIDadded = true;
         ScreenTitleChange("ALREADY ADDED!", 0, 0);
+        tone(buzzer, 100, 1500);
         delay(2000);
         Screen = Menu4Screen;
         break;
@@ -491,10 +499,12 @@ void LookForCard(boolean WantToAddCard) {
       strcpy(arrayOfRFIDs[numOfRFIDs], buffer);
       numOfRFIDs++;
       ScreenTitleChange("RFID ADDED", 0, 0);
+      tone(buzzer, 1000, 500);
       delay(2000);
       Screen = Menu4Screen;
     } else if (numOfRFIDs >= 5 && RFIDadded == false) {
       ScreenTitleChange("MEMORY FULL", 0, 0);
+      tone(buzzer, 100, 1500);
       delay(2000);
       Screen = Menu4Screen;
     }
@@ -508,39 +518,35 @@ void lcdClear500ms() {
   delay(500);
 }
 void fetchHomeData() {
-   unsigned long currentTime = millis();
-      if (currentTime - previousTime >= eventInterval2) {
-       int waterLevel;
-  floatHumidity = HT.readHumidity();
-  floatTempC = HT.readTemperature();
+  unsigned long currentTime = millis();
+  if (currentTime - previousTime >= eventInterval2) {
+    int waterLevel;
+    floatHumidity = HT.readHumidity();
+    floatTempC = HT.readTemperature();
+    waterLevel = analogRead(WaterLevelPin);
+    if (waterLevel <= 100) {
+      stringWaterLevel = "Empty";
 
+    } else if (waterLevel > 100 && waterLevel <= 300) {
+      stringWaterLevel = "Low";
 
-  waterLevel = analogRead(WaterLevelPin);
-  if (waterLevel <= 100) {
-    stringWaterLevel = "Empty";
+    } else if (waterLevel > 300 && waterLevel <= 300) {
+      stringWaterLevel = "Medium";
+
+    } else if (waterLevel > 330) {
+      stringWaterLevel = "High";
+    }
+    dtostrf(floatHumidity, 4, 1, charHumidity);
+    dtostrf(floatTempC, 4, 1, charTempC);
     
-  } else if (waterLevel > 100 && waterLevel <= 300) {
-    stringWaterLevel = "Low";
-    
-  } else if (waterLevel > 300 && waterLevel <= 300) {
-    stringWaterLevel = "Medium";
-    
-  } else if (waterLevel > 330) {
-    stringWaterLevel = "High";
-   
+   //String serialToSend = "api_key=" + apiKeyValue + "&sensor=" + sensorName + "&location=" + sensorLocation
+     //               + "&value1=" + floatTempC + "&value2=" + floatHumidity + "&value3=" + stringWaterLevel + "";
+               
+       
+    String serialToSend = "&value1=" + String(floatTempC) + "&value2=" + String(floatHumidity) + "&value3=" + stringWaterLevel + "&value4=" + stringAlarmStatus + "" ;
+                                   
+    Serial.print(serialToSend);
+    previousTime = currentTime;
   }
-
-  
-  dtostrf(floatHumidity, 4, 1, charHumidity);
-  dtostrf(floatTempC, 4, 1, charTempC);
- //Serial.print(String(stringWaterLevel) + String(floatHumidity) + String(floatTempC));
- String serialToSend="api_key=" + apiKeyValue + "&sensor=" + sensorName
-                        + "&location=" + sensorLocation + "&value1=" + floatTempC
-                           + "&value2=" + floatHumidity + "&value3=" + stringWaterLevel + "";
-     
-     Serial.print(serialToSend);
-    
-        previousTime = currentTime;
-      }
   return;
 }
