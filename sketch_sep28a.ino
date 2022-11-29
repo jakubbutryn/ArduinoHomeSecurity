@@ -3,7 +3,7 @@
 #include <WiFiClient.h>
 #include <ArduinoJson.h>
 
-StaticJsonDocument<64> doc;
+StaticJsonDocument<128> doc;
 const char* ssid = "NETIASPOT-98C2";
 const char* password = "7g4D6UcG6qp6";
 const char* serverName1 = "http://mts.wibro.agh.edu.pl/~s403062/projekt_inzynierski/esp-post-data.php";
@@ -31,17 +31,33 @@ void loop() {
 // Specify content-type header
       http.addHeader("Content-Type", "application/x-www-form-urlencoded");
      String httpRequestData = Serial.readString();
-     Serial.print(httpRequestData);
+     //Serial.print(httpRequestData);
       int httpResponseCode = http.POST(httpRequestData);
+//JSON 
 
-      
+
+http.end();      
+
+
+http.begin(client, serverName2);
+
+httpResponseCode=http.GET();
+String payload = http.getString();
+
+DeserializationError error = deserializeJson(doc, payload);
+
+if (error) {
+  Serial.print(F("deserializeJson() failed: "));
+  Serial.println(error.f_str());
+  return;
+}
+
+const char* TurnOnAlarm = doc["TurnOnAlarm"]; // "yes"
+const char* TurnOnHeating = doc["TurnOnHeating"]; // "yes"
+const char* SetTemperature = doc["SetTemperature"]; // "21"
+Serial.print(TurnOnAlarm);
 
 http.end();
-
-
-     
-    }
-  
 }
 }
-
+}
