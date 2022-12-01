@@ -16,6 +16,7 @@
 #define Menu2Screen 21
 #define Menu3Screen 22
 #define Menu4Screen 23
+#define Menu5Screen 24
 #define ActivatingAlarmScreen 2
 #define ActivatedAlarmScreen 3
 #define ChangePasswordScreen 4
@@ -25,6 +26,7 @@
 #define HomeDataScreen 8
 #define DisableAlarmScreen 9
 #define AddRFIDScreen 10
+#define TempControlScreen 11
 #define TrigPin 32
 #define EchoPin 33
 #define ServoPin 2
@@ -47,7 +49,7 @@ int yJoystickPosition = 0;
 const byte ROWS = 4;
 const byte COLS = 4;
 const unsigned long eventInterval = 100;
-const unsigned long eventInterval2 = 2000;
+const unsigned long eventInterval2 = 5000;
 unsigned long previousTime = 0;
 long Duration;
 float Distance;
@@ -60,6 +62,7 @@ String tempPassword;
 String apiKeyValue = "tPmAT5Ab3j7F9";
 String sensorName = "DHT11";
 String sensorLocation = "Home";
+String tempSerial;
 char *stringWaterLevel;
 char *stringAlarmStatus="Disarmed"   ;
 boolean passChangeMode = false;
@@ -76,6 +79,9 @@ char charTempC[7];
 char tempChar[40];
 char tempChar1[40];
 char tempChar2[40];
+char TurnOnAlarm[40];
+char TurnOnHeating[40];
+char SetTemperature[40];
 char arrayOfRFIDs[5][12];
 
 
@@ -173,12 +179,36 @@ void loop() {
     fetchHomeData();
   } else if (Screen == Menu4Screen) {
     ScreenTitleChange("Add new RFID", 0, 0);
-    Arrow('Up');
+    Arrow('Both');
     lcdClear500ms();
     digitalRead(SWPIN) == LOW ? Screen = AddRFIDScreen : Screen = Menu4Screen;
     ScroolUpDown();
     fetchHomeData();
-  } else if (Screen == ActivatingAlarmScreen) {
+    }
+    else if(Screen == Menu5Screen){
+
+    ScreenTitleChange("Temp Control", 0, 0);
+    Arrow('Up');
+    lcdClear500ms();
+    digitalRead(SWPIN) == LOW ? Screen = TempControlScreen : Screen = Menu5Screen;
+    ScroolUpDown();
+    fetchHomeData();
+ 
+    }else if(Screen == TempControlScreen) {
+      lcd.clear();
+      lcd.setCursor(0,0);
+    lcd.print("Heating:");
+    lcd.setCursor(10,0);
+    lcd.print("ON");
+    lcd.setCursor(0,1);
+    lcd.print("Set Temp:");
+    lcd.setCursor(10,1);
+    lcd.print("20");
+    
+fetchHomeData();
+delay(2000);
+    }
+     else if (Screen == ActivatingAlarmScreen) {
     stringAlarmStatus="Activating";
     ScreenTitleChange("Alarm Activated", 0, 0);
     lcd.setCursor(0, 1);
@@ -417,7 +447,7 @@ int ScroolUpDown() {
     case 0:
       break;
     case 1:
-      Screen + 1 >= 23 ? Screen = 23 : Screen = Screen + 1;
+      Screen + 1 >= 24 ? Screen = 24 : Screen = Screen + 1;
       tone(buzzer, 700, 100);
       break;
     case -1:
@@ -544,8 +574,15 @@ void fetchHomeData() {
                
        
     String serialToSend = "&value1=" + String(floatTempC) + "&value2=" + String(floatHumidity) + "&value3=" + stringWaterLevel + "&value4=" + stringAlarmStatus + "" ;
-                                   
-    Serial.print(serialToSend);
+     Serial.print(serialToSend);
+    //} 
+        while(Serial.available() > 0) {
+         tempSerial=Serial.readString();
+        
+    }                          
+    
+
+Serial.print('\n');
     previousTime = currentTime;
   }
   return;
